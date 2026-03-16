@@ -750,16 +750,17 @@ func (h *ProviderHandler) filterModelsByKeys(provider schemas.ModelProvider, mod
 	for _, keyID := range keyIDs {
 		for _, key := range config.Keys {
 			if key.ID == keyID {
-				if len(key.Models) > 0 {
-					// Key has model restrictions - add them to allowedModels
+				if slices.Contains(key.Models, "*") {
+					// Key allows all models (wildcard)
+					hasUnrestrictedKey = true
+				} else if len(key.Models) > 0 {
+					// Key has specific model restrictions - add them to allowedModels
 					hasRestrictedKey = true
 					for _, model := range key.Models {
 						allowedModels[model] = true
 					}
-				} else {
-					// Key has no model restrictions - grants access to all models
-					hasUnrestrictedKey = true
 				}
+				// else: empty Models = deny all — key contributes nothing
 				break
 			}
 		}
