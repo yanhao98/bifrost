@@ -458,7 +458,7 @@ func ConvertToBifrostContext(ctx *fasthttp.RequestCtx, allowDirectKeys bool, mat
 			key := schemas.Key{
 				ID:     "header-provided", // Identifier for header-provided keys
 				Value:  *schemas.NewEnvVar(apiKey),
-				Models: []string{}, // Empty models list - will be validated by provider
+				Models: schemas.WhiteList{}, // Empty models list - will be validated by provider
 				Weight: 1.0,        // Default weight
 			}
 			bifrostCtx.SetValue(schemas.BifrostContextKeyDirectKey, key)

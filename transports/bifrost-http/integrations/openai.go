@@ -280,7 +280,7 @@ func AzureEndpointPreHook(handlerStore lib.HandlerStore) func(ctx *fasthttp.Requ
 
 		key := schemas.Key{
 			ID:             uuid.New().String(),
-			Models:         []string{},
+			Models:         schemas.WhiteList{},
 			AzureKeyConfig: &schemas.AzureKeyConfig{},
 		}
 
