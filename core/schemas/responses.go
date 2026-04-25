@@ -1399,6 +1399,10 @@ func normalizeResponsesToolType(t ResponsesToolType) ResponsesToolType {
 		return ResponsesToolTypeCodeInterpreter
 	case strings.HasPrefix(s, "memory") && t != ResponsesToolTypeMemory:
 		return ResponsesToolTypeMemory
+	case t == ResponsesToolTypeToolSearch:
+		return t
+	case strings.HasPrefix(s, "tool_search"):
+		return ResponsesToolTypeToolSearch
 	default:
 		return t
 	}
@@ -1433,6 +1437,7 @@ type ResponsesTool struct {
 	*ResponsesToolCustom
 	*ResponsesToolWebSearchPreview
 	*ResponsesToolNamespace
+	*ResponsesToolToolSearch
 }
 
 // mergeJSONFields merges all top-level fields from src into dst using sjson,
@@ -1562,6 +1567,10 @@ func (t ResponsesTool) MarshalJSON() ([]byte, error) {
 	case ResponsesToolTypeNamespace:
 		if t.ResponsesToolNamespace != nil {
 			typeBytes, err = MarshalSorted(t.ResponsesToolNamespace)
+		}
+	case ResponsesToolTypeToolSearch:
+		if t.ResponsesToolToolSearch != nil {
+			typeBytes, err = MarshalSorted(t.ResponsesToolToolSearch)
 		}
 	}
 	if err != nil {
@@ -1730,6 +1739,13 @@ func (t *ResponsesTool) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		t.ResponsesToolNamespace = &namespaceTool
+
+	case ResponsesToolTypeToolSearch:
+		var toolSearchTool ResponsesToolToolSearch
+		if err := Unmarshal(data, &toolSearchTool); err != nil {
+			return err
+		}
+		t.ResponsesToolToolSearch = &toolSearchTool
 	}
 
 	return nil
@@ -1900,9 +1916,11 @@ type ResponsesToolComputerUsePreview struct {
 
 // ResponsesToolWebSearch represents a tool web search
 type ResponsesToolWebSearch struct {
-	Filters           *ResponsesToolWebSearchFilters      `json:"filters,omitempty"`             // Filters for the search
-	SearchContextSize *string                             `json:"search_context_size,omitempty"` // "low" | "medium" | "high"
-	UserLocation      *ResponsesToolWebSearchUserLocation `json:"user_location,omitempty"`       // The approximate location of the user
+	Filters            *ResponsesToolWebSearchFilters      `json:"filters,omitempty"`             // Filters for the search
+	SearchContextSize  *string                             `json:"search_context_size,omitempty"` // "low" | "medium" | "high"
+	UserLocation       *ResponsesToolWebSearchUserLocation `json:"user_location,omitempty"`       // The approximate location of the user
+	ExternalWebAccess  *bool                               `json:"external_web_access,omitempty"`
+	SearchContentTypes []string                            `json:"search_content_types,omitempty"`
 
 	// Anthropic only
 	MaxUses *int `json:"max_uses,omitempty"` // Maximum number of uses for the search
@@ -2132,8 +2150,9 @@ type ResponsesToolCustomFormat struct {
 
 // ResponsesToolWebSearchPreview represents a web search preview
 type ResponsesToolWebSearchPreview struct {
-	SearchContextSize *string                             `json:"search_context_size,omitempty"` // "low" | "medium" | "high"
-	UserLocation      *ResponsesToolWebSearchUserLocation `json:"user_location,omitempty"`       // The user's location
+	SearchContextSize  *string                             `json:"search_context_size,omitempty"` // "low" | "medium" | "high"
+	UserLocation       *ResponsesToolWebSearchUserLocation `json:"user_location,omitempty"`       // The user's location
+	SearchContentTypes []string                            `json:"search_content_types,omitempty"`
 }
 
 // ResponsesToolWebFetch represents a web fetch tool
@@ -2146,6 +2165,12 @@ type ResponsesToolWebFetch struct {
 // ResponsesToolNamespace represents a namespace tool that groups related function tools.
 type ResponsesToolNamespace struct {
 	Tools []ResponsesTool `json:"tools,omitempty"`
+}
+
+// ResponsesToolToolSearch represents a tool_search tool.
+type ResponsesToolToolSearch struct {
+	Execution  *string                 `json:"execution,omitempty"`
+	Parameters *ToolFunctionParameters `json:"parameters,omitempty"`
 }
 
 // ======================================================= Streaming Structs =======================================================
