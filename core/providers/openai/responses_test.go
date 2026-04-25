@@ -2,6 +2,7 @@ package openai
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1444,7 +1445,7 @@ func TestToOpenAIResponsesRequest_ToolNormalization(t *testing.T) {
 					},
 				},
 				{
-					Type: schemas.ResponsesToolTypeWebSearch,
+					Type:                   schemas.ResponsesToolTypeWebSearch,
 					ResponsesToolWebSearch: &schemas.ResponsesToolWebSearch{},
 				},
 			},
@@ -1539,6 +1540,120 @@ func TestToOpenAIResponsesRequest_PreservesExplicitEmptyToolParameters(t *testin
 	}
 	if string(marshaled) != `{}` {
 		t.Fatalf("expected parameters to remain {}, got %s", marshaled)
+	}
+}
+
+func TestToOpenAIResponsesRequest_PreservesToolSearchWebSearchAndNamespaceTools(t *testing.T) {
+	externalWebAccess := true
+	toolSearchExecution := "client"
+	searchContentTypes := []string{"text", "image"}
+	queryDescription := "search query"
+
+	bifrostReq := &schemas.BifrostResponsesRequest{
+		Provider: schemas.OpenAI,
+		Model:    "gpt-5.4",
+		Input: []schemas.ResponsesMessage{{
+			Role: schemas.Ptr(schemas.ResponsesInputMessageRoleUser),
+			Content: &schemas.ResponsesMessageContent{
+				ContentStr: schemas.Ptr("hello"),
+			},
+		}},
+		Params: &schemas.ResponsesParameters{
+			Tools: []schemas.ResponsesTool{
+				{
+					Type:        schemas.ResponsesToolTypeToolSearch,
+					Description: schemas.Ptr("tool search"),
+					ResponsesToolToolSearch: &schemas.ResponsesToolToolSearch{
+						Execution: &toolSearchExecution,
+						Parameters: &schemas.ToolFunctionParameters{
+							Type:        "object",
+							Description: &queryDescription,
+							Properties: schemas.NewOrderedMapFromPairs(
+								schemas.KV("query", map[string]interface{}{
+									"type": "string",
+								}),
+							),
+							Required: []string{"query"},
+						},
+					},
+				},
+				{
+					Type: schemas.ResponsesToolTypeWebSearch,
+					ResponsesToolWebSearch: &schemas.ResponsesToolWebSearch{
+						ExternalWebAccess:  &externalWebAccess,
+						SearchContentTypes: append([]string(nil), searchContentTypes...),
+					},
+				},
+				{
+					Type:        schemas.ResponsesToolTypeNamespace,
+					Name:        schemas.Ptr("mcp__node_repl__"),
+					Description: schemas.Ptr("node repl tools"),
+					ResponsesToolNamespace: &schemas.ResponsesToolNamespace{
+						Tools: []schemas.ResponsesTool{{
+							Type:        schemas.ResponsesToolTypeFunction,
+							Name:        schemas.Ptr("js"),
+							Description: schemas.Ptr("run js"),
+							ResponsesToolFunction: &schemas.ResponsesToolFunction{
+								Parameters: &schemas.ToolFunctionParameters{
+									Type:       "object",
+									Properties: schemas.NewOrderedMap(),
+								},
+							},
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	result := ToOpenAIResponsesRequest(bifrostReq)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	if len(result.Tools) != 3 {
+		t.Fatalf("expected 3 tools preserved, got %d", len(result.Tools))
+	}
+
+	var gotToolSearch *schemas.ResponsesTool
+	var gotWebSearch *schemas.ResponsesTool
+	var gotNamespace *schemas.ResponsesTool
+	for i := range result.Tools {
+		switch result.Tools[i].Type {
+		case schemas.ResponsesToolTypeToolSearch:
+			gotToolSearch = &result.Tools[i]
+		case schemas.ResponsesToolTypeWebSearch:
+			gotWebSearch = &result.Tools[i]
+		case schemas.ResponsesToolTypeNamespace:
+			gotNamespace = &result.Tools[i]
+		}
+	}
+
+	if gotToolSearch == nil || gotToolSearch.ResponsesToolToolSearch == nil {
+		t.Fatal("expected tool_search tool with payload preserved")
+	}
+	if gotToolSearch.ResponsesToolToolSearch.Execution == nil || *gotToolSearch.ResponsesToolToolSearch.Execution != "client" {
+		t.Fatalf("expected tool_search execution=client, got %+v", gotToolSearch.ResponsesToolToolSearch.Execution)
+	}
+	if gotToolSearch.ResponsesToolToolSearch.Parameters == nil {
+		t.Fatal("expected tool_search parameters preserved")
+	}
+
+	if gotWebSearch == nil || gotWebSearch.ResponsesToolWebSearch == nil {
+		t.Fatal("expected web_search tool preserved")
+	}
+	if gotWebSearch.ResponsesToolWebSearch.ExternalWebAccess == nil || !*gotWebSearch.ResponsesToolWebSearch.ExternalWebAccess {
+		t.Fatalf("expected web_search external_web_access=true, got %+v", gotWebSearch.ResponsesToolWebSearch.ExternalWebAccess)
+	}
+	if !reflect.DeepEqual(gotWebSearch.ResponsesToolWebSearch.SearchContentTypes, searchContentTypes) {
+		t.Fatalf("expected web_search search_content_types preserved, got %+v", gotWebSearch.ResponsesToolWebSearch.SearchContentTypes)
+	}
+
+	if gotNamespace == nil || gotNamespace.ResponsesToolNamespace == nil {
+		t.Fatal("expected namespace tool preserved")
+	}
+	if len(gotNamespace.ResponsesToolNamespace.Tools) != 1 {
+		t.Fatalf("expected namespace child tools preserved, got %+v", gotNamespace.ResponsesToolNamespace.Tools)
 	}
 }
 

@@ -870,3 +870,74 @@ func TestOpenAIResponsesRequest_MarshalJSON_KeepsAllWhenAllSupported(t *testing.
 		t.Errorf("expected 3 tools preserved, got %d", len(decoded.Tools))
 	}
 }
+
+func TestOpenAIResponsesRequest_MarshalJSON_PreservesToolSearchNamespaceAndWebSearchFields(t *testing.T) {
+	externalWebAccess := true
+	toolSearchExecution := "client"
+	req := &OpenAIResponsesRequest{
+		Model: "gpt-5.4",
+		Input: OpenAIResponsesRequestInput{
+			OpenAIResponsesRequestInputArray: []schemas.ResponsesMessage{{
+				Role:    schemas.Ptr(schemas.ResponsesInputMessageRoleUser),
+				Content: &schemas.ResponsesMessageContent{ContentStr: schemas.Ptr("hello")},
+			}},
+		},
+		ResponsesParameters: schemas.ResponsesParameters{
+			Tools: []schemas.ResponsesTool{
+				{
+					Type:        schemas.ResponsesToolTypeToolSearch,
+					Description: schemas.Ptr("tool search"),
+					ResponsesToolToolSearch: &schemas.ResponsesToolToolSearch{
+						Execution: &toolSearchExecution,
+						Parameters: &schemas.ToolFunctionParameters{
+							Type:       "object",
+							Properties: schemas.NewOrderedMap(),
+						},
+					},
+				},
+				{
+					Type: schemas.ResponsesToolTypeWebSearch,
+					ResponsesToolWebSearch: &schemas.ResponsesToolWebSearch{
+						ExternalWebAccess:  &externalWebAccess,
+						SearchContentTypes: []string{"text", "image"},
+					},
+				},
+				{
+					Type:        schemas.ResponsesToolTypeNamespace,
+					Name:        schemas.Ptr("mcp__node_repl__"),
+					Description: schemas.Ptr("node repl tools"),
+					ResponsesToolNamespace: &schemas.ResponsesToolNamespace{
+						Tools: []schemas.ResponsesTool{{
+							Type:        schemas.ResponsesToolTypeFunction,
+							Name:        schemas.Ptr("js"),
+							Description: schemas.Ptr("run js"),
+							ResponsesToolFunction: &schemas.ResponsesToolFunction{
+								Parameters: &schemas.ToolFunctionParameters{Type: "object", Properties: schemas.NewOrderedMap()},
+							},
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	jsonBytes, err := req.MarshalJSON()
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	raw := string(jsonBytes)
+	for _, expected := range []string{
+		`"tool_search"`,
+		`"execution":"client"`,
+		`"parameters":{`,
+		`"namespace"`,
+		`"mcp__node_repl__"`,
+		`"external_web_access":true`,
+		`"search_content_types":["text","image"]`,
+	} {
+		if !strings.Contains(raw, expected) {
+			t.Fatalf("expected marshaled JSON to contain %s, got %s", expected, raw)
+		}
+	}
+}
